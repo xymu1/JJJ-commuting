@@ -1,0 +1,243 @@
+---
+title: "Data Processing"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Set the working directory
+setwd("/path/to/your/directory")
+
+
+# Load libraries
+library(dplyr)
+library(haven)
+library(lme4)
+library(car)
+library(corrplot)
+```
+
+# 1. Entropy density
+
+```{r,include=FALSE}
+
+# Function to count the number of non-zero categories
+count_non_zero_categories <- function(row) {
+  return(sum(row > 0, na.rm = TRUE))
+}
+
+# Function to calculate entropy index with a minimum threshold for the number of categories
+entropy_index <- function(row, min_categories = 3) {
+  num_categories <- sum(row > 0)  # Count the number of non-zero categories
+  if (num_categories < min_categories) {
+    return(0)  # Set entropy to zero if the number of categories is below the threshold
+  }
+  total_poi <- sum(row) + 1  # Add 1 to ensure total_poi is not zero
+  proportions <- row / total_poi
+  entropy <- -sum(proportions * log(proportions), na.rm = TRUE)
+  return(entropy)
+}
+
+data <- read.csv("data.csv",header=TRUE)
+
+# Apply log transformation to each POI category
+log_transform <- function(x) log(x + 1)
+
+poi_columns <- c("pop_grid","workforce_grid","dining_grid","hotel_grid","shopping_grid","dailyservice_grid","beauty_grid","tourist_grid","leisure_grid","sport_grid","edu_grid","culture_grid","health_grid","automotive_grid","traffic_grid","finance_grid","office_grid","housing_grid","company_grid","gov_grid","green_grid")
+data[poi_columns] <- lapply(data[poi_columns], log_transform)
+
+# Calculate the entropy index for each grid with a minimum category threshold
+data$entropy_index <- apply(data[, poi_columns], 1, entropy_index, min_categories = 3)
+data$categories <- apply(data[, poi_columns], 1, count_non_zero_categories)
+
+
+# Group data by 'town', 'county', and 'city', and sum the POIs for each category
+town_data <- aggregate(data[, poi_columns], by = list(data$town), FUN = sum, na.rm = TRUE)
+county_data <- aggregate(data[, poi_columns], by = list(data$county), FUN = sum, na.rm = TRUE)
+city_data <- aggregate(data[, poi_columns], by = list(data$city), FUN = sum, na.rm = TRUE)
+
+# Rename the first column to 'town', 'county', and 'city' respectively
+names(town_data)[1] <- "town"
+names(county_data)[1] <- "county"
+names(city_data)[1] <- "city"
+
+# Apply log transformation to aggregated data
+town_data[poi_columns] <- lapply(town_data[poi_columns], log_transform)
+county_data[poi_columns] <- lapply(county_data[poi_columns], log_transform)
+city_data[poi_columns] <- lapply(city_data[poi_columns], log_transform)
+
+town_data$categories <- apply(town_data[, -1], 1, count_non_zero_categories)
+county_data$categories <- apply(county_data[, -1], 1, count_non_zero_categories)
+city_data$categories <- apply(city_data[, -1], 1, count_non_zero_categories)
+
+# Calculate the entropy index for each aggregated level with the category threshold
+town_data$entropy_index <- apply(town_data[, -1], 1, entropy_index, min_categories = 17)
+county_data$entropy_index <- apply(county_data[, -1], 1, entropy_index, min_categories = 17)
+city_data$entropy_index <- apply(city_data[, -1], 1, entropy_index, min_categories = 17)
+
+grid <- select(data,c(grid,entropy_index))
+town <- select(town_data,c(town,entropy_index))
+county <- select(county_data,c(county,entropy_index))
+city <- select(city_data,c(city,entropy_index))
+
+colnames(data)[colnames(data) == "entropy_index"] <- "entropy_grid"
+
+data <- merge(data,town,by="town",all.x=T)
+colnames(data)[colnames(data) == "entropy_index"] <- "townentotal"
+
+data <- merge(data,county,by="county",all.x=T)
+colnames(data)[colnames(data) == "entropy_index"] <- "countyentotal"
+
+data <- merge(data,city,by="city",all.x=T)
+colnames(data)[colnames(data) == "entropy_index"] <- "cityentotal"
+
+#calculate the entropy density
+data$entropy_town <- data$townentotal/data$townarea
+data$entropy_ct <- data$countyentotal/data$countyarea
+data$entropy_city <- data$cityentotal/data$cityarea
+
+```
+
+#2. Transforming variables into quintiles or categories
+
+```{r,include=FALSE}
+
+# Define transformation functions
+quintile_transform <- function(df, var, n) {
+  df[[paste0(var, '_', n)]] <- as.numeric(cut(df[[var]], breaks = quantile(df[[var]], probs = seq(0, 1, by = 1/n), na.rm = TRUE), include.lowest = TRUE, labels = FALSE))
+  return(df)
+}
+
+binary_transform <- function(df, var) {
+  df[[paste0(var, '_3')]] <- ifelse(df[[var]] == 0, 0,
+                                    as.numeric(cut(df[[var]][df[[var]] > 0],
+                                                   breaks = quantile(df[[var]][df[[var]] > 0], probs = seq(0, 1, by = 0.5), na.rm = TRUE),
+                                                   include.lowest = TRUE,
+                                                   labels = FALSE)))
+  return(df)
+}
+
+unique_transform <- function(df, var) {
+  df[[paste0(var, '_5')]] <- ifelse(df[[var]] == 0, 0,
+                                    as.numeric(cut(df[[var]][df[[var]] > 0],
+                                                   breaks = quantile(df[[var]][df[[var]] > 0], probs = seq(0, 1, by = 0.25), na.rm = TRUE),
+                                                   include.lowest = TRUE,
+                                                   labels = FALSE)))
+  return(df)
+}
+
+# List of variables to transform
+vars_to_quintile <- c("pop_grid", "workforce_grid", "pop_town", "childpct_town", "workpct_town",
+                      "migrantpct_town", "pop_ct", "popdens_ct", "sexratio_ct", "hhsize_ct", 
+                      "gdpp_ct", "urban_ct", "medage_ct", "workforcepct_ct", "edu_ct", "illiteracyr_ct", "minoritypct_ct", "entropy_ct")
+
+vars_to_binary <- c("dining_grid", "shopping_grid", "edu_grid", "health_grid", "traffic_grid", 
+                    "finance_grid", "office_grid", "housing_grid", "company_grid", "gov_grid", "pop_city", "urban_city", "gdpp_city", "entropy_city")
+
+vars_to_unique <- c("entropy_grid","entropy_town")
+
+# Apply transformations
+for (var in vars_to_quintile) {
+  data <- quintile_transform(data, var, 5)
+}
+
+for (var in vars_to_binary) {
+  data <- binary_transform(data, var)
+}
+
+for (var in vars_to_unique) {
+  data <- unique_transform(data, var)
+}
+
+
+write_dta(data, "jjj.dta")
+
+
+```
+
+# 3. Check multicollinearity problem
+```{r,include=FALSE}
+
+# Log transform variables
+log_vars <- c("pop_grid", "workforce_grid", "pop_town", "gdpp_ct", "popdens_ct", "pop_ct", "pop_city", "gdpp_city",
+              "dining_grid", "shopping_grid", "edu_grid", "health_grid", "traffic_grid", "finance_grid", "office_grid",
+              "housing_grid", "company_grid", "gov_grid")
+for (var in log_vars) {
+  data[[paste0('lg', var)]] <- log(data[[var]] + 1)
+}
+
+# Fit the linear model
+model <- lm(distance ~ lgpop_grid + lgworkforce_grid + lgdining_grid + lgshopping_grid + lgedu_grid +
+             lghealth_grid + lgtraffic_grid + lgfinance_grid + lgoffice_grid + lghousing_grid + lgcompany_grid +
+             lggov_grid + entropy_grid + lgpop_town + childpct_town + workpct_town + migrantpct_town + entropy_town +
+             lgpop_ct + lgpopdens_ct + sexratio_ct + hhsize_ct + lggdpp_ct + urban_ct + medage_ct + edu_ct +
+             workforcepct_ct + illiteracyr_ct + minoritypct_ct + entropy_ct + lgpop_city + urban_city + lggdpp_city + entropy_city,
+           data = data)
+
+summary(model)
+
+# Calculate VIF values
+vif_values <- vif(model)
+high_vif <- vif_values[vif_values > 5]
+print(high_vif)
+
+# Compute and visualize the correlation matrix
+columns_to_correlate <- c("lgpop_grid", "lgworkforce_grid", "lgdining_grid", "lgshopping_grid",
+                          "lgedu_grid", "lghealth_grid", "lgtraffic_grid", "lgfinance_grid",
+                          "lgoffice_grid", "lghousing_grid", "lgcompany_grid", "lggov_grid",
+                          "entropy_grid", "lgpop_town", "childpct_town", "workpct_town",
+                          "migrantpct_town", "entropy_town", "lgpop_ct", "lgpopdens_ct",
+                          "sexratio_ct", "hhsize_ct", "lggdpp_ct", "urban_ct", "medage_ct",
+                          "edu_ct", "workforcepct_ct", "illiteracyr_ct", "minoritypct_ct",
+                          "entropy_ct", "lgpop_city", "urban_city", "lggdpp_city", "entropy_city")
+
+cor_matrix <- cor(data[columns_to_correlate], use = "complete.obs")
+
+corrplot(cor_matrix, method = "circle")
+
+# Highlight significant correlations
+highlight_matrix <- cor_matrix
+highlight_matrix[abs(cor_matrix) <= 0.7] <- NA
+corrplot(highlight_matrix, method = "circle", col = "red", na.label = " ")
+
+# Convert variables to factors
+vars_to_factorize <- c("pop_grid_5", "workforce_grid_5", "dining_grid_3", "shopping_grid_3",
+                       "edu_grid_3", "health_grid_3", "traffic_grid_3", "finance_grid_3",
+                       "office_grid_3", "housing_grid_3", "company_grid_3", "gov_grid_3",
+                       "entropy_grid_5", "pop_town_5", "childpct_town_5", "workpct_town_5",
+                       "migrantpct_town_5", "entropy_town_5", "pop_ct_5", "popdens_ct_5",
+                       "sexratio_ct_5", "hhsize_ct_5", "gdpp_ct_5", "urban_ct_5",
+                       "medage_ct_5", "edu_ct_5", "workforcepct_ct_5", "illiteracyr_ct_5",
+                       "minoritypct_ct_5", "entropy_ct_5", "pop_city_3", "urban_city_3",
+                       "gdpp_city_3", "entropy_city_3")
+
+data[vars_to_factorize] <- lapply(data[vars_to_factorize], factor)
+
+
+
+```
+
+# 4. Multilevel models
+
+```{r,include=FALSE}
+# Fit null model
+null_model <- lmer(distance ~ 1 + (1 | city/county/town), data = data)
+summary(null_model)
+
+# Fit Model 1
+model_1 <- lmer(distance ~ entropy_grid_5 + traffic_grid_3 + (1 | city/county/town), data = data)
+summary(model_1)
+
+# Fit Model 2
+model_2 <- lmer(distance ~ entropy_grid_5 + traffic_grid_3 + childpct_town_5 + entropy_town_5 + (1 | city/county/town), data = data)
+summary(model_2)
+
+# Fit Model 3
+model_3 <- lmer(distance ~ entropy_grid_5 + traffic_grid_3 + entropy_town_5 + childpct_town_5 +
+                  entropy_ct_5 + sexratio_ct_5 + gdpp_ct_5 + illiteracyr_ct_5 + minoritypct_ct_5 + (1 | city/county/town), data = data)
+summary(model_3)
+
+# Fit Full Model
+model_full <- lmer(distance ~ entropy_grid_5 + traffic_grid_3 + entropy_town_5 + childpct_town_5 +
+                    entropy_ct_5 + sexratio_ct_5 + gdpp_ct_5 + illiteracyr_ct_5 + minoritypct_ct_5 + pop_city_3 + (1 | city/county/town), data = data)
+summary(model_full)
+```
