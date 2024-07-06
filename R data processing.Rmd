@@ -5,7 +5,8 @@ output: html_document
 
 ```{r setup, include=FALSE}
 # Set the working directory
-setwd("/path/to/your/directory")
+#setwd("/path/to/your/directory")
+setwd("D:/Baiducommuting/JJJ")
 
 
 # Load libraries
@@ -212,7 +213,24 @@ vars_to_factorize <- c("pop_grid_5", "workforce_grid_5", "dining_grid_3", "shopp
 
 data[vars_to_factorize] <- lapply(data[vars_to_factorize], factor)
 
+model_matrix <- as.data.frame(model.matrix(~ traffic_grid_3 + entropy_grid_5 + childpct_town_5 + entropy_town_5 + sexratio_ct_5 + gdpp_ct_5 + illiteracyr_ct_5 + minoritypct_ct_5 + entropy_ct_5 + pop_city_3, data = data))
 
+# Add 'distance' to model_matrix
+model_matrix$distance <- data$distance
+
+
+library(car)
+# Fit the model
+lm_model_cat <- lm(distance ~ 0 + ., data = model_matrix)
+summary(lm_model_cat)
+
+vif_values_cat <- vif(lm_model_cat)
+print(vif_values_cat)
+
+high_vif <- vif_values_cat[vif_values_cat > 5]
+
+# Print the variable names and their corresponding high VIF values
+print(high_vif)
 
 ```
 
