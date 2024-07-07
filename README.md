@@ -3,7 +3,7 @@ This repository contains the code used for the analysis presented in the article
 
 THIS README FILE WAS LAST UPDATED ON 07 JULY 2024.
 
-The main steps include calculating entropy density, transforming variables into quintiles or categories, checking for multicollinearity, and fitting multilevel models.
+The main steps of data processing include calculating entropy density, transforming variables into quintiles or categories, checking for multicollinearity, and fitting multilevel models.
 
 The data was processed using R 4.1.3, and the models were performed using StataMP 16.0.
 
