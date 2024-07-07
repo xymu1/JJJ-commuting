@@ -5,7 +5,7 @@ THIS README FILE WAS LAST UPDATED ON 07 JULY 2024.
 
 The main steps of data processing include calculating entropy density, transforming variables into quintiles or categories, checking for multicollinearity, and fitting multilevel models.
 
-The data was processed using R 4.1.3, and the models were performed using StataMP 16.0.
+The data was processed using R 4.1.3, and the models were performed using Stata 16.
 
 The dataset contains 108,052 rows (grids). The fields in the dataset are as follows:
 
