@@ -1,7 +1,7 @@
 # JJJ-commuting
 This repository contains the code used for the analysis presented in the article "From Grids to Cities: A Multilevel Examination of Commuting Distance Variation in the Jing-Jin-Ji Region".
 
-THIS README FILE WAS LAST UPDATED ON 07 JULY 2024, BY XIAOYAN MU
+THIS README FILE WAS LAST UPDATED ON 07 JULY 2024.
 
 The main steps include calculating entropy density, transforming variables into quintiles or categories, checking for multicollinearity, and fitting multilevel models.
 
